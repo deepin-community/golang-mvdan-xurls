@@ -1,0 +1,19 @@
+golang-mvdan-xurls (2.3.0-1) unstable; urgency=medium
+
+  * New upstream version
+  * Add Multi-Arch hint
+  * Update Standards-Version to 4.6.0 (no changes)
+
+ -- Shengjing Zhu <zhsj@debian.org>  Sat, 09 Oct 2021 23:47:50 +0800
+
+golang-mvdan-xurls (2.2.0-2) unstable; urgency=medium
+
+  * No need golang-github-rogpeppe-go-internal-dev
+
+ -- Shengjing Zhu <zhsj@debian.org>  Tue, 17 Nov 2020 12:18:59 +0800
+
+golang-mvdan-xurls (2.2.0-1) unstable; urgency=medium
+
+  * Initial release (Closes: #974929)
+
+ -- Shengjing Zhu <zhsj@debian.org>  Tue, 17 Nov 2020 00:40:14 +0800
