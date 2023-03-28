@@ -37,6 +37,37 @@ func TestScripts(t *testing.T) {
 			mux.HandleFunc("/redir-2", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, "/redir-1", http.StatusMovedPermanently)
 			})
+
+			mux.HandleFunc("/redir-longer", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, "/redir-longtarget", http.StatusMovedPermanently)
+			})
+			mux.HandleFunc("/redir-longtarget", func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, "long target")
+			})
+			mux.HandleFunc("/redir-fragment", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, "/plain#bar", http.StatusMovedPermanently)
+			})
+
+			mux.HandleFunc("/redir-301", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, "/plain", 301)
+			})
+			mux.HandleFunc("/redir-302", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, "/plain", 302)
+			})
+			mux.HandleFunc("/redir-307", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, "/plain", 307)
+			})
+			mux.HandleFunc("/redir-308", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, "/plain", 308)
+			})
+
+			mux.HandleFunc("/404", func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "", 404)
+			})
+			mux.HandleFunc("/500", func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "", 500)
+			})
+
 			ln, err := net.Listen("tcp", ":0")
 			if err != nil {
 				return err
