@@ -6,6 +6,7 @@ package xurls
 import (
 	"fmt"
 	"regexp"
+	"sync"
 	"testing"
 )
 
@@ -165,7 +166,14 @@ var constantTestCases = []testCase{
 	{`http://foo.com/path`, true},
 	{`http://foo.com:8080/path`, true},
 	{`http://1.1.1.1/path`, true},
+	{`http://1.1.1.1:8080/path`, true},
+	{`http://[1080::8:800:200c:417a]/path`, true},
+	{`http://[1080::8:800:200c:417a]:8080/path`, true},
+
+	// scheme://IPv6_addr is not valid per RFC 3987, but is supported anyway (for now).
 	{`http://1080::8:800:200c:417a/path`, true},
+	{`http://2001.db8:0/path`, true},
+
 	{`http://中国.中国/中国`, true},
 	{`http://中国.中国/foo中国`, true},
 	{`http://उदाहरण.परीकषा`, true},
@@ -178,6 +186,7 @@ var constantTestCases = []testCase{
 	{`https://test.foo.bar/path?a=b`, `https://test.foo.bar/path?a=b`},
 	{`ftp://user@foo.bar`, true},
 	{`http://foo.com/base64-bCBwbGVhcw==`, true},
+	{`http://foo.com/–`, true},
 	{`http://foo.com/🐼`, true},
 	{`https://shmibbles.me/tmp/自殺でも？.png`, true},
 	{`randomtexthttp://foo.bar/etc`, "http://foo.bar/etc"},
@@ -218,9 +227,81 @@ func TestRegexes(t *testing.T) {
 		{`300.1.1.1`, nil},
 		{`1.1.1.300`, nil},
 		{`foo@1.2.3.4`, `1.2.3.4`},
-		{`1080:0:0:0:8:800:200C:4171`, true},
-		{`3ffe:2a00:100:7031::1`, true},
-		{`1080::8:800:200c:417a`, true},
+
+		// https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
+		{`::1`, true},
+		//{`::`, true},
+		{`::ffff:0:0`, true},
+		{`64:ff9b::`, true},
+		{`64:ff9b:1::`, true},
+		{`100::`, true},
+		{`2001::`, true},
+		{`2001:1::1`, true},
+		{`2001:1::2`, true},
+		{`2001:2::`, true},
+		{`2001:3::`, true},
+		{`2001:4:112::`, true},
+		{`2001:10::`, true},
+		{`2001:20::`, true},
+		{`2001:db8::`, true},
+		{`2002::`, true},
+		{`2620:4f:8000::`, true},
+		{`fc00::`, true},
+		{`fe80::`, true},
+
+		// https://datatracker.ietf.org/doc/html/rfc4291#section-2.2
+		{`ABCD:EF01:2345:6789:ABCD:EF01:2345:6789`, true},
+		{`2001:DB8:0:0:8:800:200C:417A`, true},
+		{`2001:DB8:0:0:8:800:200C:417A`, true}, // a unicast address
+		{`FF01:0:0:0:0:0:0:101`, true},         // a multicast address
+		{`0:0:0:0:0:0:0:1`, true},              // the loopback address
+		{`0:0:0:0:0:0:0:0`, true},              // the unspecified address
+		{`2001:DB8::8:800:200C:417A`, true},    // a unicast address
+		{`FF01::101`, true},                    // a multicast address
+		{`::1`, true},                          // the loopback address
+		//{`::`, true},                         // the unspecified address
+		{`::`, nil},
+		{`0:0:0:0:0:0:13.1.68.3`, true},
+		{`0:0:0:0:0:FFFF:129.144.52.38`, true},
+		{`::13.1.68.3`, true},
+		{`::FFFF:129.144.52.38`, true},
+
+		// https://datatracker.ietf.org/doc/html/rfc5952#section-1
+		{`2001:db8:0:0:1:0:0:1`, true},
+		{`2001:0db8:0:0:1:0:0:1`, true},
+		{`2001:db8::1:0:0:1`, true},
+		{`2001:db8::0:1:0:0:1`, true},
+		{`2001:0db8::1:0:0:1`, true},
+		{`2001:db8:0:0:1::1`, true},
+		{`2001:db8:0000:0:1::1`, true},
+		{`2001:DB8:0:0:1::1`, true},
+
+		// https://datatracker.ietf.org/doc/html/rfc5952#section-2.1
+		{`2001:db8:aaaa:bbbb:cccc:dddd:eeee:0001`, true},
+		{`2001:db8:aaaa:bbbb:cccc:dddd:eeee:001`, true},
+		{`2001:db8:aaaa:bbbb:cccc:dddd:eeee:01`, true},
+		{`2001:db8:aaaa:bbbb:cccc:dddd:eeee:1`, true},
+
+		// https://datatracker.ietf.org/doc/html/rfc5952#section-2.2
+		{`2001:db8:aaaa:bbbb:cccc:dddd::1`, true},
+		{`2001:db8:aaaa:bbbb:cccc:dddd:0:1`, true},
+		{`2001:db8:0:0:0::1`, true},
+		{`2001:db8:0:0::1`, true},
+		{`2001:db8:0::1`, true},
+		{`2001:db8::1`, true},
+		{`2001:db8::aaaa:0:0:1`, true},
+		{`2001:db8:0:0:aaaa::1`, true},
+
+		// https://datatracker.ietf.org/doc/html/rfc5952#section-2.3
+		{`2001:db8:aaaa:bbbb:cccc:dddd:eeee:aaaa`, true},
+		{`2001:db8:aaaa:bbbb:cccc:dddd:eeee:AAAA`, true},
+		{`2001:db8:aaaa:bbbb:cccc:dddd:eeee:AaAa`, true},
+
+		// An IP address in URI host position must be bracketed unless it is IPv4.
+		// https://www.rfc-editor.org/rfc/rfc3986#section-3.2.2
+		// TODO: Implement this restriction, ideally without matching the `http://1080` prefix.
+		//{`http://1080::8:800:200c:417a/path`, `1080::8:800:200c:417a`},
+
 		{`foo.com:8080`, true},
 		{`foo.com:8080/path`, true},
 		{`test.foo.com`, true},
@@ -270,6 +351,11 @@ func TestRegexes(t *testing.T) {
 		{`3ffe:2a00:100:7031::1`, nil},
 		{`test.foo.com:8080/path`, nil},
 		{`foo@bar.com`, nil},
+
+		// An IP address in URI host position must be bracketed unless it is IPv4.
+		// https://www.rfc-editor.org/rfc/rfc3986#section-3.2.2
+		// TODO: Implement this restriction, ideally without matching the `http://1080` prefix.
+		//{`http://1080::8:800:200c:417a/path`, nil},
 	})
 }
 
@@ -318,36 +404,64 @@ func TestStrictMatchingSchemeAny(t *testing.T) {
 	})
 }
 
-func bench(b *testing.B, re *regexp.Regexp, str string) {
-	for i := 0; i < b.N; i++ {
-		re.FindAllString(str, -1)
-	}
+func bench(b *testing.B, re func() *regexp.Regexp, str string) {
+	b.ReportAllocs()
+	b.SetBytes(int64(len(str)))
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			re().FindAllString(str, -1)
+		}
+	})
 }
 
-func BenchmarkStrictEmpty(b *testing.B) {
-	bench(b, Strict(), "foo")
+const inputNone = `
+foo bar
+yaml: "as well"
+some more plaintext
+which does not contain any urls.
+`
+
+const inputMany = `
+foo bar http://foo.foo https://192.168.1.1/path
+foo.com bitcoin:address ftp://
+xmpp:foo@bar.com
+`
+
+func BenchmarkStrict_none(b *testing.B) {
+	bench(b, Strict, inputNone)
 }
 
-func BenchmarkStrictSingle(b *testing.B) {
-	bench(b, Strict(), "http://foo.foo foo.com")
+func BenchmarkStrict_many(b *testing.B) {
+	bench(b, Strict, inputMany)
 }
 
-func BenchmarkStrictMany(b *testing.B) {
-	bench(b, Strict(), ` foo bar http://foo.foo
-	foo.com bitcoin:address ftp://
-	xmpp:foo@bar.com`)
+func BenchmarkRelaxed_none(b *testing.B) {
+	bench(b, Relaxed, inputNone)
 }
 
-func BenchmarkRelaxedEmpty(b *testing.B) {
-	bench(b, Relaxed(), "foo")
+func BenchmarkRelaxed_many(b *testing.B) {
+	bench(b, Relaxed, inputMany)
 }
 
-func BenchmarkRelaxedSingle(b *testing.B) {
-	bench(b, Relaxed(), "http://foo.foo foo.com")
+var rxMatchingScheme *regexp.Regexp
+var rxMatchingSchemeOnce sync.Once
+
+func matchingScheme() *regexp.Regexp {
+	rxMatchingSchemeOnce.Do(func() {
+		rx, err := StrictMatchingScheme("https?://")
+		if err != nil {
+			panic(err)
+		}
+		rxMatchingScheme = rx
+	})
+	return rxMatchingScheme
 }
 
-func BenchmarkRelaxedMany(b *testing.B) {
-	bench(b, Relaxed(), ` foo bar http://foo.foo
-	foo.com bitcoin:address ftp://
-	xmpp:foo@bar.com`)
+func BenchmarkStrictMatchingScheme_none(b *testing.B) {
+	bench(b, matchingScheme, inputNone)
+}
+
+func BenchmarkStrictMatchingScheme_many(b *testing.B) {
+	bench(b, matchingScheme, inputMany)
 }

@@ -1,1 +1,5 @@
+cmd/xurls/xurls
+generate/tldsgen/tldsgen
+generate/regexgen/regexgen
+
 .pc/
